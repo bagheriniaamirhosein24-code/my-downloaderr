@@ -3,32 +3,27 @@ import yt_dlp
 import os
 import shutil
 
-# -----------------------------------
-# تنظیمات هوشمند
-# -----------------------------------
-# بررسی اینکه آیا روی سرور ابری هستیم یا لپ‌تاپ؟
-# اگر پوشه ffmpeg.exe نباشد، فرض می‌کنیم روی سرور لینوکس هستیم
+# تشخیص محیط (لپ‌تاپ یا سرور ابری)
 IS_LOCAL = os.path.exists("ffmpeg.exe")
 
 if IS_LOCAL:
-    # تنظیمات لپ‌تاپ (با پروکسی و فایل exe)
     PROXY_URL = "socks5://127.0.0.1:10808"
-    FFMPEG_LOC = '.'
 else:
-    # تنظیمات سرور ابری (بدون پروکسی، ffmpeg سیستمی)
     PROXY_URL = None
-    FFMPEG_LOC = None  # خودش از سیستم پیدا می‌کند
 
 DOWNLOAD_DIR = "Cloud_Downloads"
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
 
-# تنظیمات صفحه
 st.set_page_config(page_title="دانلودر من", page_icon="☁️", layout="centered")
-st.title("☁️ دانلودر ابری (همیشه آنلاین)")
+st.title("☁️ دانلودر ابری (با کوکی)")
 
-# ورودی لینک
 url = st.text_input("🔗 لینک ویدیو:")
+
+# چک کردن وجود فایل کوکی
+COOKIE_FILE = "cookies.txt"
+if not os.path.exists(COOKIE_FILE):
+    st.warning("⚠️ فایل cookies.txt پیدا نشد! احتمال ارور 403 روی سرور زیاد است.")
 
 @st.cache_data(show_spinner=False)
 def get_formats(link):
@@ -36,8 +31,9 @@ def get_formats(link):
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
+        # اضافه کردن کوکی برای دور زدن تحریم یوتیوب
+        'cookiefile': COOKIE_FILE if os.path.exists(COOKIE_FILE) else None
     }
-    # فقط اگر لوکال بودیم پروکسی بزن
     if IS_LOCAL:
         ydl_opts['proxy'] = PROXY_URL
 
@@ -55,21 +51,21 @@ def get_formats(link):
 
 if st.button("🔎 بررسی"):
     if not url:
-        st.error("لینک بدهید!")
+        st.error("لینک را وارد کنید")
     else:
-        with st.spinner("در حال اتصال به یوتیوب..."):
+        with st.spinner("در حال اتصال..."):
             qualities = get_formats(url)
             if qualities:
                 st.session_state['qualities'] = qualities
                 st.session_state['url'] = url
-                st.success("✅ پیدا شد!")
+                st.success("✅ متصل شد!")
             else:
-                st.error("❌ خطا (احتمالا آی‌پی سرور محدود شده است)")
+                st.error("❌ خطا: یوتیوب اجازه دسترسی نداد (کوکی چک شود).")
 
 if 'qualities' in st.session_state and st.session_state['url'] == url:
     quality = st.selectbox("کیفیت:", st.session_state['qualities'], index=len(st.session_state['qualities'])-1)
     
-    if st.button("⬇️ دانلود کن"):
+    if st.button("⬇️ دانلود"):
         progress_bar = st.progress(0)
         status = st.empty()
         
@@ -82,6 +78,8 @@ if 'qualities' in st.session_state and st.session_state['url'] == url:
             'quiet': True,
             'nocheckcertificate': True,
             'merge_output_format': 'mp4',
+            # استفاده حیاتی از کوکی در هنگام دانلود
+            'cookiefile': COOKIE_FILE if os.path.exists(COOKIE_FILE) else None
         }
         
         if IS_LOCAL:
@@ -89,7 +87,7 @@ if 'qualities' in st.session_state and st.session_state['url'] == url:
             ydl_opts['ffmpeg_location'] = '.'
         
         try:
-            status.text("⏳ در حال پردازش در ابر...")
+            status.text("⏳ در حال دانلود...")
             progress_bar.progress(20)
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -98,11 +96,11 @@ if 'qualities' in st.session_state and st.session_state['url'] == url:
                 final_filename = os.path.splitext(filename)[0] + ".mp4"
             
             progress_bar.progress(100)
-            status.text("✅ آماده شد!")
+            status.text("✅ تمام شد!")
             
             with open(final_filename, "rb") as file:
                 st.download_button(
-                    label="💾 ذخیره در گوشی",
+                    label="💾 ذخیره فایل",
                     data=file,
                     file_name=os.path.basename(final_filename),
                     mime="video/mp4"
